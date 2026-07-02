@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mod dog — 直播安全管理與頻道防禦控制系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ── SIDEBAR ── -->
+  <aside id="sidebar">
+    <div class="sidebar-brand">
+      <svg class="brand-icon" viewBox="0 0 32 32" width="32" height="32">
+        <polygon points="16,2 30,8 30,20 16,30 2,20 2,8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <polyline points="10,14 16,10 22,14 22,22 10,22" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="16" y1="10" x2="16" y2="6" stroke="currentColor" stroke-width="1"/>
+        <circle cx="12" cy="16" r="1.2" fill="currentColor"/>
+        <circle cx="20" cy="16" r="1.2" fill="currentColor"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">mod dog</span>
+        <span class="brand-sub">安全管理控制台</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <div class="sidebar-item active" data-panel="dashboard">
+        <span class="sidebar-icon">◈</span>
+        控制台
+      </div>
+      <div class="sidebar-item" data-panel="risk">
+        <span class="sidebar-icon">⚡</span>
+        風險攔截牆
+      </div>
+      <div class="sidebar-item" data-panel="chat">
+        <span class="sidebar-icon">💬</span>
+        聊天串流
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">頻道防禦</div>
+      <div class="sidebar-item" data-panel="blacklist">
+        <span class="sidebar-icon">🛡</span>
+        跨平台黑名單
+      </div>
+      <div class="sidebar-item" data-panel="whitelist">
+        <span class="sidebar-icon">✓</span>
+        白名單管理
+      </div>
+      <div class="sidebar-item" data-panel="mods">
+        <span class="sidebar-icon">👥</span>
+        房管協作
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">官方串接</div>
+      <div class="sidebar-item" data-panel="api">
+        <span class="sidebar-icon">🔗</span>
+        API 授權
+      </div>
+      <div class="sidebar-item" data-panel="settings">
+        <span class="sidebar-icon">⚙</span>
+        頻道設定
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-dot online"></span>
+        <span id="sidebarStatus">未連線</span>
+      </div>
+      <div class="sidebar-version">mod dog v1.0.0</div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div id="main">
+    <!-- ── TOPBAR ── -->
+    <header id="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title" id="pageTitle">控制台</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="status-pills">
+          <span class="pill" id="modCount">房管: 0</span>
+          <span class="pill" id="msgRate">0 msg/s</span>
+          <span class="pill danger" id="riskCount">風險: 0</span>
+        </div>
+        <button class="btn btn-primary" id="btnDemoMode">▶ 啟動 Demo</button>
+        <button class="btn btn-danger" id="btnKillSwitch">⚠ 緊急斷路器</button>
+      </div>
+    </header>
+
+    <!-- ── PANELS ── -->
+    <div id="content">
+
+      <!-- DASHBOARD PANEL -->
+      <div class="panel active" id="panelDashboard">
+        <div class="card-grid">
+          <div class="card stat-card">
+            <div class="stat-label">已攔截風險</div>
+            <div class="stat-value" id="statRisk">0</div>
+            <div class="stat-sub">PII: <span id="statPii">0</span> | 洗板: <span id="statSpam">0</span></div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-label">訊息吞吐</div>
+            <div class="stat-value" id="statMsgRate">0</div>
+            <div class="stat-sub">msg / 秒</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-label">活躍房管</div>
+            <div class="stat-value" id="statMods">1</div>
+            <div class="stat-sub">互斥鎖已啟用</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-label">黑名單</div>
+            <div class="stat-value" id="statBlacklist">0</div>
+            <div class="stat-sub">跨平台同步中</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">快速操作</span>
+          </div>
+          <div class="card-body">
+            <div class="quick-actions">
+              <button class="action-btn" id="btnQuickBan">
+                <span class="action-icon">🚫</span>
+                <span class="action-text">批次封鎖</span>
+              </button>
+              <button class="action-btn" id="btnQuickClear">
+                <span class="action-icon">🗑</span>
+                <span class="action-text">清除風險</span>
+              </button>
+              <button class="action-btn" id="btnQuickSlow">
+                <span class="action-icon">⏱</span>
+                <span class="action-text">慢速模式</span>
+              </button>
+              <button class="action-btn" id="btnQuickSubOnly">
+                <span class="action-icon">🔒</span>
+                <span class="action-text">訂閱者模式</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">即時審計日誌</span>
+          </div>
+          <div class="card-body">
+            <div id="auditLog" class="audit-scroll"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RISK WALL PANEL -->
+      <div class="panel" id="panelRisk">
+        <div class="panel-toolbar">
+          <button class="btn btn-ghost" id="btnClearRisks">清除全部</button>
+          <button class="btn btn-warn" id="btnBatchBan">批次封鎖</button>
+          <div class="toolbar-info">
+            <span id="piiBlocked">PII 擋下: 0</span>
+            <span id="spamGrouped">群組化: 0</span>
+          </div>
+        </div>
+        <div id="riskList" class="scroll-area"></div>
+      </div>
+
+      <!-- CHAT STREAM PANEL -->
+      <div class="panel" id="panelChat">
+        <div class="panel-toolbar">
+          <input type="text" id="chatFilter" class="input" placeholder="搜尋聊天訊息...">
+          <label class="checkbox-label">
+            <input type="checkbox" id="autoScroll" checked> 自動捲動
+          </label>
+        </div>
+        <div id="chatMessages" class="scroll-area chat-area"></div>
+      </div>
+
+      <!-- BLACKLIST PANEL -->
+      <div class="panel" id="panelBlacklist">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">跨平台黑名單聯防</span>
+            <label class="toggle">
+              <input type="checkbox" id="crossPlatformSync" checked>
+              <span class="toggle-slider"></span>
+              <span class="toggle-text">Twitch ↔ YouTube 同步</span>
+            </label>
+          </div>
+          <div class="card-body">
+            <div id="blacklistTags" class="tag-wrap"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHITELIST PANEL -->
+      <div class="panel" id="panelWhitelist">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">工商網址白名單</span>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <input type="text" id="whitelistUrl" class="input" placeholder="輸入 URL 正規表達式或字串">
+              <input type="number" id="whitelistDuration" class="input input-sm" placeholder="有效秒數 (0=永久)" min="0">
+              <button class="btn btn-primary" id="btnAddWhitelist">新增</button>
+            </div>
+            <div id="whitelistTags" class="tag-wrap" style="margin-top:12px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODS PANEL -->
+      <div class="panel" id="panelMods">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">多房管互斥鎖狀態</span>
+          </div>
+          <div class="card-body">
+            <div id="mutexStatus" class="mod-grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API PANEL -->
+      <div class="panel" id="panelApi">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Twitch 頻道連線</span>
+            <span class="badge" id="twitchBadge">未連線</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">輸入頻道名稱與 OAuth Token，連接 Twitch IRC 聊天室即時訊息。</p>
+            <div class="form-row" style="margin-bottom:12px">
+              <input type="text" id="twitchChannel" class="input" placeholder="Twitch 頻道名稱 (例: gaaborng)">
+              <input type="text" id="twitchToken" class="input" placeholder="OAuth Token (oauth:xxxxxx)">
+            </div>
+            <div class="form-row">
+              <button class="btn btn-primary" id="btnTwitchConnect">連線聊天室</button>
+              <button class="btn btn-ghost" id="btnTwitchDisconnect" style="display:none">斷開連線</button>
+            </div>
+            <div id="twitchStatus" style="margin-top:12px;font-size:12px;color:var(--text-dim)"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">YouTube 授權</span>
+            <span class="badge" id="youtubeBadge">未連線</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">透過官方 OAuth 2.0 授權登入，系統不儲存任何密碼。</p>
+            <button class="btn btn-primary" id="btnYoutubeAuth">連線 YouTube</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">開發者憑證設定</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">或直接在此填入 Twitch Developer App 的憑證（需先到 <a href="https://dev.twitch.tv/console/apps" target="_blank" style="color:var(--accent)">dev.twitch.tv</a> 建立應用程式）。</p>
+            <div class="form-row" style="margin-bottom:10px">
+              <input type="text" id="cfgClientId" class="input" placeholder="Twitch Client ID">
+              <input type="password" id="cfgClientSecret" class="input" placeholder="Twitch Client Secret">
+            </div>
+            <div class="form-row">
+              <button class="btn btn-primary" id="btnSaveConfig">儲存憑證</button>
+              <span id="cfgStatus" style="font-size:12px;color:var(--text-dim)"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS PANEL -->
+      <div class="panel" id="panelSettings">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">慢速模式</span>
+            <span class="card-value" id="slowModeValue">0 秒</span>
+          </div>
+          <div class="card-body">
+            <input type="range" id="slowModeSlider" min="0" max="120" value="0" class="range-slider">
+            <div class="range-labels"><span>0s</span><span>60s</span><span>120s</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">身分限制</span>
+          </div>
+          <div class="card-body">
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="btnSubOnly">
+                <span class="toggle-slider"></span>
+                <span class="toggle-text">僅訂閱者可發言</span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="btnFollowerOnly">
+                <span class="toggle-slider"></span>
+                <span class="toggle-text">僅追隨者可發言</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── KILL SWITCH OVERLAY ── -->
+  <div id="killOverlay">
+    <div class="kill-icon">⚠</div>
+    <div class="kill-title">緊急斷路器已啟動</div>
+    <div class="kill-desc">聊天室視覺層已完全隔離，惡意內容無法擴散至直播畫面。</div>
+    <button class="btn btn-danger btn-lg" id="btnDeactivateKill">解除斷路器</button>
+  </div>
+
+  <!-- ── TOAST CONTAINER ── -->
+  <div id="toastContainer"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
