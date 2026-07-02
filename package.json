@@ -1,0 +1,12 @@
+{
+  "name": "mod-dog",
+  "version": "1.0.0",
+  "description": "直播安全管理與頻道防禦控制系統",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

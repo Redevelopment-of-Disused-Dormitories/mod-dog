@@ -34,39 +34,29 @@ async function init() {
 
   // Restore saved token
   const savedToken = await db.getSetting('twitch_token');
-  const savedChannel = await db.getSetting('twitch_channel');
-  if (savedToken && savedChannel) {
+  if (savedToken) {
     $('#twitchToken').value = savedToken;
-    $('#twitchChannel').value = savedChannel;
+    $('#btnTwitchConnect').textContent = '重連';
+    $('#btnTwitchDisconnect').style.display = '';
+    twitchAuth.setToken(savedToken);
   }
 }
 
 // ── Sidebar Navigation ──
 function setupSidebar() {
-  const panelMap = {
-    dashboard: { el: 'panelDashboard', title: '控制台' },
-    risk: { el: 'panelRisk', title: '風險攔截牆' },
-    chat: { el: 'panelChat', title: '聊天串流' },
-    blacklist: { el: 'panelBlacklist', title: '跨平台黑名單' },
-    whitelist: { el: 'panelWhitelist', title: '白名單管理' },
-    mods: { el: 'panelMods', title: '房管協作' },
-    api: { el: 'panelApi', title: 'API 授權' },
-    settings: { el: 'panelSettings', title: '頻道設定' },
-  };
-
-  document.querySelectorAll('.sidebar-item').forEach((item) => {
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      const key = item.dataset.panel;
-      if (!key || !panelMap[key]) return;
-
-      document.querySelectorAll('.sidebar-item').forEach((s) => s.classList.remove('active'));
+  $$('.sidebar-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      $$('.sidebar-item').forEach((s) => s.classList.remove('active'));
       item.classList.add('active');
-
-      document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
-      const target = document.getElementById(panelMap[key].el);
-      if (target) target.classList.add('active');
-      $('#pageTitle').textContent = panelMap[key].title;
+      $$('.panel').forEach((p) => p.classList.remove('active'));
+      const panelId = item.dataset.panel;
+      if (panelId && panelId !== 'dashboard') {
+        $(`#${panelId}`).classList.add('active');
+        $('#pageTitle').textContent = item.textContent.trim();
+      } else {
+        $('#panelDashboard').classList.add('active');
+        $('#pageTitle').textContent = '控制台';
+      }
     });
   });
 }
@@ -132,6 +122,94 @@ function setupUI() {
     addAuditEntry('CROSS_SYNC', e.target.checked ? 'ON' : 'OFF');
   });
 
+  // Twitch OAuth via implicit flow
+  $('#btnTwitchConnect').addEventListener('click', async () => {
+    const token = $('#twitchToken').value.trim();
+    const clientId = await db.getSetting('twitch_client_id');
+
+    if (!token) {
+      toast('請先輸入 OAuth Token', 'error');
+      return;
+    }
+
+    if (!token.startsWith('oauth:')) {
+      toast('Token 格式不正確，應為 oauth:xxxxx', 'error');
+      return;
+    }
+
+    if (!clientId) {
+      toast('請先設定 Twitch Client ID', 'error');
+      return;
+    }
+
+    // Test token
+    const testResp = await fetch('https://id.twitch.tv/oauth2/validate', {
+      headers: { 'Authorization': token },
+    });
+
+    if (!testResp.ok) {
+      toast('Token 無效，請檢查後重試', 'error');
+      $('#twitchToken').value = '';
+      await db.setSetting('twitch_token', null);
+      return;
+    }
+
+    await db.setSetting('twitch_token', token);
+    twitchAuth.setToken(token);
+    $('#btnTwitchConnect').textContent = '重連';
+    $('#btnTwitchDisconnect').style.display = '';
+    toast('OAuth Token 驗證成功');
+  });
+
+  $('#btnTwitchDisconnect').addEventListener('click', () => {
+    twitchAuth.clearToken();
+    $('#twitchToken').value = '';
+    $('#btnTwitchConnect').textContent = '連線';
+    $('#btnTwitchDisconnect').style.display = 'none';
+    toast('已斷開連線');
+    addAuditEntry('TWITCH_DISCONNECT', '');
+  });
+
+  // Config button
+  $('#btnSaveConfig').addEventListener('click', async () => {
+    const clientId = $('#cfgClientId').value.trim();
+    if (!clientId) {
+      toast('請輸入 Client ID', 'error');
+      return;
+    }
+
+    // Check if client exists
+    const resp = await fetch(`https://api.twitch.tv/helix/users?login=${$('#twitchUsername').value || 'test'}`, {
+      headers: { 'Client-Id': clientId },
+    });
+    if (resp.status === 401) {
+      toast('Client ID 無效', 'error');
+      return;
+    }
+
+    await db.setSetting('twitch_client_id', clientId);
+    $('#cfgStatus').textContent = '已儲存';
+    $('#cfgStatus').className = 'success';
+    setTimeout(() => { $('#cfgStatus').textContent = ''; }, 2000);
+    toast('Client ID 已儲存');
+  });
+
+  // Auth listener
+  twitchAuth.onUpdate(({ token, username }) => {
+    if (token) {
+      $('#twitchBadge').textContent = '已連線';
+      $('#twitchBadge').classList.add('connected');
+      if (username) $('#twitchUsernameDisplay').textContent = username;
+      $('#sidebarStatus').textContent = 'Twitch 已連線';
+      $('.sidebar-stat-dot').classList.add('online');
+    } else {
+      $('#twitchBadge').textContent = '未連線';
+      $('#twitchBadge').classList.remove('connected');
+      $('#sidebarStatus').textContent = '未連線';
+      $('.sidebar-stat-dot').classList.remove('online');
+    }
+  });
+
   // Risk listener
   risk.onUpdate(({ riskItems, spamGroups, piiCount, groupedCount }) => {
     renderRiskWall(riskItems, spamGroups);
@@ -157,109 +235,49 @@ function setupUI() {
     $('#modCount').textContent = `房管: ${count}`;
     $('#statMods').textContent = count;
   });
-
-  // Save config button
-  $('#btnSaveConfig').addEventListener('click', async () => {
-    const clientId = $('#cfgClientId').value.trim();
-    const secret = $('#cfgClientSecret').value.trim();
-    if (clientId) await db.setSetting('twitch_client_id', clientId);
-    if (secret) await db.setSetting('twitch_client_secret', secret);
-    $('#cfgStatus').textContent = '已儲存';
-    setTimeout(() => { $('#cfgStatus').textContent = ''; }, 2000);
-    toast('憑證已儲存至本地');
-  });
 }
 
-// ── Twitch IRC Connection ──
-function setupTwitch() {
-  // Connect button
-  $('#btnTwitchConnect').addEventListener('click', async () => {
-    const channel = $('#twitchChannel').value.trim();
-    let token = $('#twitchToken').value.trim();
+// ── Twitch Auth (Implicit Flow) ──
+const twitchAuth = {
+  token: null,
+  username: null,
+  channelId: null,
+  listeners: new Set(),
 
-    if (!channel) {
-      toast('請輸入頻道名稱', 'error');
-      return;
+  setToken(token) {
+    this.token = token;
+
+    // Get user info
+    fetch(`/api/twitch-user?token=${encodeURIComponent(token)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.login) {
+          this.username = data.login;
+          this.channelId = data.id;
+          db.setSetting('twitch_username', data.login);
+          db.setSetting('twitch_channel_id', data.id);
+        }
+      })
+      .finally(() => {
+        this.emit();
+      });
+  },
+
+  clearToken() {
+    this.token = null;
+    this.username = null;
+    this.channelId = null;
+    this.emit();
+  },
+
+  emit() {
+    for (const fn of this.listeners) {
+      fn({ token: this.token, username: this.username, channelId: this.channelId });
     }
-    if (!token) {
-      toast('請輸入 OAuth Token', 'error');
-      return;
-    }
+  },
 
-    // Normalize token
-    if (!token.startsWith('oauth:')) token = 'oauth:' + token;
-
-    $('#twitchStatus').textContent = '連線中...';
-    $('#btnTwitchConnect').disabled = true;
-
-    try {
-      await twitch.connect(channel, token, '');
-      await db.setSetting('twitch_token', token);
-      await db.setSetting('twitch_channel', channel);
-
-      $('#twitchBadge').textContent = '已連線';
-      $('#twitchBadge').classList.add('connected');
-      $('#twitchStatus').innerHTML = `已連線至 <strong>#${channel}</strong> 的聊天室`;
-      $('#btnTwitchConnect').style.display = 'none';
-      $('#btnTwitchDisconnect').style.display = '';
-      $('#sidebarStatus').textContent = `Twitch: #${channel}`;
-      $('.sidebar-stat-dot').classList.add('online');
-
-      addAuditEntry('TWITCH_CONNECT', `#${channel}`);
-      toast(`已連線至 #${channel}`);
-
-      // Switch to chat panel
-      document.querySelectorAll('.sidebar-item').forEach((s) => s.classList.remove('active'));
-      document.querySelector('[data-panel="chat"]').classList.add('active');
-      document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
-      $('#panelChat').classList.add('active');
-      $('#pageTitle').textContent = '聊天串流';
-    } catch (err) {
-      $('#twitchStatus').textContent = '連線失敗: ' + err.message;
-      toast('Twitch 連線失敗', 'error');
-    }
-
-    $('#btnTwitchConnect').disabled = false;
-  });
-
-  // Disconnect button
-  $('#btnTwitchDisconnect').addEventListener('click', () => {
-    twitch.disconnect();
-    $('#twitchBadge').textContent = '未連線';
-    $('#twitchBadge').classList.remove('connected');
-    $('#twitchStatus').textContent = '';
-    $('#btnTwitchConnect').style.display = '';
-    $('#btnTwitchDisconnect').style.display = 'none';
-    $('#sidebarStatus').textContent = '未連線';
-    $('.sidebar-stat-dot').classList.remove('online');
-    addAuditEntry('TWITCH_DISCONNECT', '');
-    toast('Twitch 已斷線');
-  });
-
-  // Listen for Twitch messages
-  twitch.onUpdate((data) => {
-    if (data.type === 'message') {
-      handleTwitchMessage(data.message);
-    } else if (data.type === 'connected') {
-      addAuditEntry('TWITCH_CONNECTED', data.channel);
-    } else if (data.type === 'disconnected') {
-      addAuditEntry('TWITCH_DISCONNECTED', '');
-    }
-  });
-}
-
-async function handleTwitchMessage(msg) {
-  chatCountNum++;
-  msgRateCounter++;
-
-  appendChatMessage(msg);
-
-  // Process through risk engine
-  const riskResult = await risk.processMessage(msg);
-  if (riskResult && riskResult.risk.type === 'pii') {
-    appendBlockedMessage(msg, riskResult.maskedText);
-  }
-}
+  onUpdate(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+};
 
 // ── Demo Mode ──
 function toggleDemoMode() {
